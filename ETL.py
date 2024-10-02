@@ -91,5 +91,16 @@ def get_csv(min_year = 2015, max_year = int(datetime.datetime.today().year)):
 
     driver.quit()
 
+    return
 
-# get_csv(min_year=2015,max_year=2024)
+data = pd.read_csv('raw_data\TCS_영업소간통행시간_1시간_1개월_202301.csv',low_memory=False, encoding='cp949')
+data1 = pd.read_csv('raw_data\수도권 영업소 코드.csv',low_memory=False, encoding='cp949')
+key = data1['영업소코드'].unique()
+
+data = data[(data['TCS차종구분코드']==1) & (data['통행시간']!=-1)]
+data = data[data['출발영업소코드'].isin(key)]
+data = data[data['도착영업소코드'].isin(key)]
+
+print(len(data))
+
+data.to_csv('202301.csv',index=False, encoding='utf-8-sig')
