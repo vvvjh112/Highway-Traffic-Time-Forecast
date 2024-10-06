@@ -289,3 +289,9 @@ def get_holiday_status(year, service_key):
 
 # 주말과 공휴일 데이터프레임 생성
 # result_df = get_holiday_status(2023, service_key)
+
+
+
+## 공사데이터 크롤링 + 1차 데이터셋 Join 해서 Row수 및 용량 테스트
+## 적합 모델 서칭
+## 추가 필요 데이터셋 탐색
