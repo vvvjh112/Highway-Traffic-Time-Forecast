@@ -168,3 +168,6 @@ raw_data/
 
 #교통량데이터
 TrafficVolume/
+
+#데이터셋
+dataset/

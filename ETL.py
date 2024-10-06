@@ -1,6 +1,7 @@
 import pandas as pd
-import os, requests, urllib.parse, time, datetime, zipfile
+import os, requests, urllib.parse, time, datetime, zipfile, chardet
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 # 셀레니움
 from selenium import webdriver
@@ -24,7 +25,7 @@ chrome_options.add_argument("--start-maximized")
 
 KEY = 8228483054
 
-os.system('cls')
+os.system('clear')
 
 
 # API 호출 후 json형태로 받기
@@ -102,26 +103,90 @@ def get_csv(url='',min_year = 2015, max_year = int(datetime.datetime.today().yea
 
     return
 
+def detect_encoding(file_path):
+    # 파일의 인코딩을 감지
+    with open(file_path, 'rb') as file:
+        result = chardet.detect(file.read(100000))  # 파일의 일부분만 읽어서 인코딩 감지
+    return result['encoding']
+
+def Traffic_Time(folder_path, code_file):
+    # 'TCS_영업소간통행시간'이 포함된 모든 CSV 파일을 불러오기
+    file_list = os.listdir(folder_path)
+
+    # '수도권 영업소 코드' 파일 인코딩 감지 및 불러오기
+    code_file_path = os.path.join(code_file)
+    code_file_encoding = detect_encoding(code_file_path)
+    data1 = pd.read_csv(code_file_path, low_memory=False, encoding=code_file_encoding)
+    key = data1['영업소코드'].unique()
+
+    # 빈 데이터프레임 생성
+    final_data = pd.DataFrame()
+
+    # 각 파일에 대해 필터 적용 및 병합
+    for file in tqdm(file_list):
+        file_path = os.path.join(folder_path, file)
+        file_encoding = detect_encoding(file_path)
+        
+        if 'csv' not in file:
+            continue
+
+        # 파일 읽기
+        data = pd.read_csv(file_path, low_memory=False, encoding=file_encoding)
+
+        # 필터링 로직 적용
+        data = data[(data['TCS차종구분코드'] == 1) & (data['통행시간'] != -1)]
+        data = data[data['출발영업소코드'].isin(key)]
+        data = data[data['도착영업소코드'].isin(key)]
+        
+        # 최종 데이터프레임에 병합
+        final_data = pd.concat([final_data, data], ignore_index=True)
+
+    return final_data
+
+def Traffic_Volume(folder_path, code_file):
+    # 'TCS_영업소간통행시간'이 포함된 모든 CSV 파일을 불러오기
+    file_list = os.listdir(folder_path)
+
+    # '수도권 영업소 코드' 파일 인코딩 감지 및 불러오기
+    code_file_path = os.path.join(code_file)
+    code_file_encoding = detect_encoding(code_file_path)
+    data1 = pd.read_csv(code_file_path, low_memory=False, encoding=code_file_encoding)
+    key = data1['영업소코드'].unique()
+
+    # 빈 데이터프레임 생성
+    final_data = pd.DataFrame()
+
+    # 각 파일에 대해 필터 적용 및 병합
+    for file in tqdm(file_list):
+        file_path = os.path.join(folder_path, file)
+        file_encoding = detect_encoding(file_path)
+        
+        if 'csv' not in file:
+            continue
+
+        # 파일 읽기
+        data = pd.read_csv(file_path, low_memory=False, encoding=file_encoding)[['집계일자', '집계시', '영업소코드', '입출구구분코드', '총교통량']]
+
+        # 필터링 로직 적용
+        data = data[data['영업소코드'].isin(key)]
+        
+        # 최종 데이터프레임에 병합
+        final_data = pd.concat([final_data, data], ignore_index=True)
+
+    return final_data
+
 # 도로 통행시간 크롤링
 # get_csv(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=11&requestfrom=dataset', min_year=2023, max_year=2023)
 
 # 교통량 크롤링
-get_csv(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=34&requestfrom=dataset', min_year=2023, max_year=2023)
+# get_csv(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=34&requestfrom=dataset', min_year=2023, max_year=2023)
 
+# 통행시간 데이터셋_ 2023
+# Time_Data = Traffic_Time('Raw_data/TrafficTime','Raw_data/gyeonggi_code.csv')
+# Time_Data.to_csv('timedata_test.csv',index=False,encoding='utf-8-sig')
 
+#교통량 데이터셋_2023
+Volume_Data = Traffic_Volume('Raw_data/TrafficVolume','Raw_data/gyeonggi_code.csv')
+Volume_Data.to_csv('volumedata_test.csv',index=False,encoding='utf-8-sig')
 
-# data = pd.read_csv('raw_data\TCS_영업소간통행시간_1시간_1개월_202301.csv',low_memory=False, encoding='cp949')
-# data1 = pd.read_csv('raw_data\수도권 영업소 코드.csv',low_memory=False, encoding='cp949')
-# key = data1['영업소코드'].unique()
-
-# data = data[(data['TCS차종구분코드']==1) & (data['통행시간']!=-1)]
-# data = data[data['출발영업소코드'].isin(key)]
-# data = data[data['도착영업소코드'].isin(key)]
-
-# print(len(data))
-
-# data.to_csv('202301.csv',index=False, encoding='utf-8-sig')
-
-
-
-# https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=34&requestfrom=dataset
+#연휴 유무 알고리즘
