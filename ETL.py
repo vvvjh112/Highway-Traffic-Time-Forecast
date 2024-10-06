@@ -56,24 +56,31 @@ def get_data(url='', params={}):
 
 
 # 영업소간 통행시간 크롤링
-def get_csv(min_year = 2015, max_year = int(datetime.datetime.today().year)):
+def get_csv(url='',min_year = 2015, max_year = int(datetime.datetime.today().year)):
     # 드라이버 초기화
     driver = webdriver.Chrome(service=service, options=chrome_options)
-    driver.get('https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=11&requestfrom=dataset')
+    # driver.get('https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=11&requestfrom=dataset')
+    driver.get(url)
     time.sleep(5)
     btn = driver.find_element(By.CSS_SELECTOR, 'input[title="1개월"]').click()
+    print(f'1개월 단위 버튼 선택 완료')
     time.sleep(3)
 
     #버튼 및 박스 선택
     combo_year = driver.find_element(By.CSS_SELECTOR, 'select[title="년도 선택"]')
+    print(f'연도 박스 탐색 완료')
     combo_month = driver.find_element(By.CSS_SELECTOR, 'select[title="월 선택"]')
+    print(f'월 선택 박스 탐색 완료')
     select_btn = driver.find_element(By.CSS_SELECTOR, 'span[class="searchBtn"]')
+    print(f'조회 버튼 탐색 완료')
     down_btn = driver.find_element(By.CSS_SELECTOR, 'span[class="btn_base"]')
+    print(f'다운 탐색 완료')
     
     #데이터 다운 시작
     for year in range(min_year,max_year+1):
         for month in range(1,13):
-        
+            print(f'{year}년 {month}월 다운 중...')
+
             #현재 월 은 데이터가 없기 때문에 break
             if year == datetime.datetime.today().year and month == datetime.datetime.today().month:
                 #마지막 다운로드 대기
@@ -89,18 +96,32 @@ def get_csv(min_year = 2015, max_year = int(datetime.datetime.today().year)):
             down_btn.click()
             time.sleep(10)
 
+    
+    print(f'크롤링 완료')
     driver.quit()
 
     return
 
-data = pd.read_csv('raw_data\TCS_영업소간통행시간_1시간_1개월_202301.csv',low_memory=False, encoding='cp949')
-data1 = pd.read_csv('raw_data\수도권 영업소 코드.csv',low_memory=False, encoding='cp949')
-key = data1['영업소코드'].unique()
+# 도로 통행시간 크롤링
+# get_csv(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=11&requestfrom=dataset', min_year=2023, max_year=2023)
 
-data = data[(data['TCS차종구분코드']==1) & (data['통행시간']!=-1)]
-data = data[data['출발영업소코드'].isin(key)]
-data = data[data['도착영업소코드'].isin(key)]
+# 교통량 크롤링
+get_csv(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=34&requestfrom=dataset', min_year=2023, max_year=2023)
 
-print(len(data))
 
-data.to_csv('202301.csv',index=False, encoding='utf-8-sig')
+
+# data = pd.read_csv('raw_data\TCS_영업소간통행시간_1시간_1개월_202301.csv',low_memory=False, encoding='cp949')
+# data1 = pd.read_csv('raw_data\수도권 영업소 코드.csv',low_memory=False, encoding='cp949')
+# key = data1['영업소코드'].unique()
+
+# data = data[(data['TCS차종구분코드']==1) & (data['통행시간']!=-1)]
+# data = data[data['출발영업소코드'].isin(key)]
+# data = data[data['도착영업소코드'].isin(key)]
+
+# print(len(data))
+
+# data.to_csv('202301.csv',index=False, encoding='utf-8-sig')
+
+
+
+# https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=34&requestfrom=dataset
