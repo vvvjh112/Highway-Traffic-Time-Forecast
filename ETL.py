@@ -1,7 +1,10 @@
 import pandas as pd
-import os, requests, urllib.parse, time, datetime, zipfile, chardet
+import os, requests, urllib.parse, time, zipfile, chardet
+import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+from datetime import datetime, timedelta
+
 
 # 셀레니움
 from selenium import webdriver
@@ -57,7 +60,7 @@ def get_data(url='', params={}):
 
 
 # 영업소간 통행시간 크롤링
-def get_csv(url='',min_year = 2015, max_year = int(datetime.datetime.today().year)):
+def get_csv(url='',min_year = 2015, max_year = int(datetime.today().year)):
     # 드라이버 초기화
     driver = webdriver.Chrome(service=service, options=chrome_options)
     # driver.get('https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=11&requestfrom=dataset')
@@ -83,7 +86,7 @@ def get_csv(url='',min_year = 2015, max_year = int(datetime.datetime.today().yea
             print(f'{year}년 {month}월 다운 중...')
 
             #현재 월 은 데이터가 없기 때문에 break
-            if year == datetime.datetime.today().year and month == datetime.datetime.today().month:
+            if year == datetime.today().year and month == datetime.today().month:
                 #마지막 다운로드 대기
                 time.sleep(20)
                 break
@@ -175,6 +178,97 @@ def Traffic_Volume(folder_path, code_file):
 
     return final_data
 
+def get_holiday_data(service_key, year):
+    """
+    1월부터 12월까지 모든 월의 공휴일 데이터를 누적하여 반환하는 함수.
+    
+    Parameters:
+    - service_key: 공공데이터포털에서 발급받은 API 서비스 키
+    - year: 조회할 연도 (예: 2024)
+    
+    Returns:
+    - holidays_df: 공휴일 정보가 담긴 pandas 데이터프레임 (1월 ~ 12월 누적)
+    """
+    url = "http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo"
+
+    # 빈 데이터프레임 생성 (누적 저장할 목적)
+    total_holidays_df = pd.DataFrame()
+    
+    with requests.Session() as session:
+        for month in range(1, 13):
+            params = {
+                'ServiceKey': service_key,
+                'solYear': year,
+                'solMonth': str(month).zfill(2),
+                'numOfRows': 100,
+                '_type': 'xml'
+            }
+
+            try:
+                response = session.get(url, params=params)
+                response.raise_for_status()  # HTTPError 발생 시 예외 발생
+                root = ET.fromstring(response.content)
+
+                holidays = []
+                for item in root.findall(".//item"):
+                    date_name = item.find('dateName').text
+                    locdate = item.find('locdate').text
+
+                    holidays.append({
+                        'name': date_name,
+                        'date': locdate
+                    })
+
+                holidays_df = pd.DataFrame(holidays)
+                total_holidays_df = pd.concat([total_holidays_df, holidays_df], ignore_index=True)
+
+            except requests.exceptions.RequestException as e:
+                print(f"API 요청 중 오류 발생: {e}")
+                continue
+
+    return total_holidays_df
+
+#달력 데이터프레임 생성
+def generate_date_range(year):
+    start_date = datetime(year, 1, 1)
+    end_date = datetime(year, 12, 31)
+    date_list = []
+
+    current_date = start_date
+    while current_date <= end_date:
+        date_list.append(current_date)
+        current_date += timedelta(days=1)
+
+    return date_list
+
+# API를 호출하여 공휴일 및 주말여부 확인 데이터생성
+def get_holiday_status(year, service_key):
+    holidays_df = get_holiday_data(service_key, year)
+    all_dates = generate_date_range(year)
+    
+    result = []
+    for date in all_dates:
+        is_holiday = holidays_df['date'].astype(str).str.contains(date.strftime('%Y%m%d')).any()
+        is_weekend = date.weekday() >= 5  # 주말(토요일(5) 또는 일요일(6))인지 확인
+
+        # 휴일 여부 결정
+        if is_holiday:
+            holiday_status = "공휴일"
+        elif is_weekend:
+            holiday_status = "주말"
+        else:
+            holiday_status = "비공휴일"
+
+        result.append({
+            '날짜': date.strftime('%Y-%m-%d'),
+            '휴일 여부': holiday_status
+        })
+
+    result_df = pd.DataFrame(result)
+    result_df.to_csv(f'{year}_years_calendar.csv',index=False,encoding='utf-8-sig')
+    return result_df
+
+
 # 도로 통행시간 크롤링
 # get_csv(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=11&requestfrom=dataset', min_year=2023, max_year=2023)
 
@@ -186,7 +280,12 @@ def Traffic_Volume(folder_path, code_file):
 # Time_Data.to_csv('timedata_test.csv',index=False,encoding='utf-8-sig')
 
 #교통량 데이터셋_2023
-Volume_Data = Traffic_Volume('Raw_data/TrafficVolume','Raw_data/gyeonggi_code.csv')
-Volume_Data.to_csv('volumedata_test.csv',index=False,encoding='utf-8-sig')
+# Volume_Data = Traffic_Volume('Raw_data/TrafficVolume','Raw_data/gyeonggi_code.csv')
+# Volume_Data.to_csv('volumedata_test.csv',index=False,encoding='utf-8-sig')
+
 
 #연휴 유무 알고리즘
+# service_key = 'JWgg0HGk6X1/iSamZNl29O5awvu46mP+wM/j8WNoLfNNfMeo2zhjPECwNdheapXHpIKbEZ0GCg1sWUm+rTdBfg=='
+
+# 주말과 공휴일 데이터프레임 생성
+# result_df = get_holiday_status(2023, service_key)
