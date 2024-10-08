@@ -27,6 +27,7 @@ chrome_options.add_argument("--start-maximized")
 
 
 KEY = 8228483054
+service_key = 'JWgg0HGk6X1/iSamZNl29O5awvu46mP+wM/j8WNoLfNNfMeo2zhjPECwNdheapXHpIKbEZ0GCg1sWUm+rTdBfg=='
 
 os.system('clear')
 
@@ -178,6 +179,30 @@ def Traffic_Volume(folder_path, code_file):
 
     return final_data
 
+# 샌드위치 휴일을 찾는 함수
+def mark_sandwich_holidays(df):
+    for i in range(1, len(df) - 1):
+        # 공휴일-비공휴일-공휴일
+        if df['휴일 여부'].iloc[i - 1] == '공휴일' and df['휴일 여부'].iloc[i + 1] == '공휴일' and df['휴일 여부'].iloc[i] == '비공휴일':
+            df.at[i, '휴일 여부'] = '샌드위치'
+        
+        # 공휴일-비공휴일-주말 또는 주말-비공휴일-공휴일
+        if (df['휴일 여부'].iloc[i - 1] == '공휴일' and df['휴일 여부'].iloc[i + 1] == '주말') or \
+           (df['휴일 여부'].iloc[i - 1] == '주말' and df['휴일 여부'].iloc[i + 1] == '공휴일'):
+            if df['휴일 여부'].iloc[i] == '비공휴일':
+                df.at[i, '휴일 여부'] = '샌드위치'
+        
+        # 비공휴일-주말-주말-공휴일 또는 공휴일-주말-주말-비공휴일
+        # 여기서 len(df)보다 크지 않은지 확인하여 인덱스 초과 방지
+        if i + 3 < len(df):
+            if (df['휴일 여부'].iloc[i] == '비공휴일' and df['휴일 여부'].iloc[i + 1] == '주말' and df['휴일 여부'].iloc[i + 2] == '주말' and df['휴일 여부'].iloc[i + 3] == '공휴일') or \
+               (df['휴일 여부'].iloc[i] == '공휴일' and df['휴일 여부'].iloc[i + 1] == '주말' and df['휴일 여부'].iloc[i + 2] == '주말' and df['휴일 여부'].iloc[i + 3] == '비공휴일'):
+                df.at[i + 3, '휴일 여부'] = '샌드위치'
+                df.at[i, '휴일 여부'] = '샌드위치'
+    
+    return df
+
+
 def get_holiday_data(service_key, year):
     """
     1월부터 12월까지 모든 월의 공휴일 데이터를 누적하여 반환하는 함수.
@@ -264,7 +289,7 @@ def get_holiday_status(year, service_key):
             '휴일 여부': holiday_status
         })
 
-    result_df = pd.DataFrame(result)
+    result_df = mark_sandwich_holidays(pd.DataFrame(result))
     result_df.to_csv(f'{year}_years_calendar.csv',index=False,encoding='utf-8-sig')
     return result_df
 
@@ -274,6 +299,13 @@ def get_holiday_status(year, service_key):
 
 # 교통량 크롤링
 # get_csv(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=34&requestfrom=dataset', min_year=2023, max_year=2023)
+
+# 수도권 교통량 크롤링
+# get_csv(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=33&requestfrom=dataset#', min_year=2023, max_year=2023)
+
+# 영업소간 교통량 크롤링
+# get_csv(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=35&requestfrom=dataset', min_year=2023, max_year=2023)
+
 
 # 통행시간 데이터셋_ 2023
 # Time_Data = Traffic_Time('Raw_data/TrafficTime','Raw_data/gyeonggi_code.csv')
@@ -285,13 +317,16 @@ def get_holiday_status(year, service_key):
 
 
 #연휴 유무 알고리즘
-# service_key = 'JWgg0HGk6X1/iSamZNl29O5awvu46mP+wM/j8WNoLfNNfMeo2zhjPECwNdheapXHpIKbEZ0GCg1sWUm+rTdBfg=='
-
 # 주말과 공휴일 데이터프레임 생성
-# result_df = get_holiday_status(2023, service_key)
+result_df = get_holiday_status(2023, service_key)
 
 
 
+
+
+
+## 통행량 데이터 고민인게 수도권 교통량도 추가할지... 일단  크롤링은 하자
+## 통행시간 데이터를 기준으로 통행량은 key값으로 날짜랑 출발 영업소 도착영업소로 나누자
 ## 공사데이터 크롤링 + 1차 데이터셋 Join 해서 Row수 및 용량 테스트
 ## 적합 모델 서칭
 ## 추가 필요 데이터셋 탐색
