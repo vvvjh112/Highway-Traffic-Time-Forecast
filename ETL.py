@@ -1,5 +1,5 @@
 import pandas as pd
-import os, requests, urllib.parse, time, zipfile, chardet
+import os, requests, urllib.parse, time, zipfile, chardet, calendar
 import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup
 from tqdm import tqdm
@@ -107,6 +107,45 @@ def get_csv(url='',min_year = 2015, max_year = int(datetime.today().year)):
 
     return
 
+
+def get_csv2(url, year, month):
+    chrome_options.add_argument("--headless")  # Headless 모드
+
+     # 드라이버 초기화
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+
+    driver.get(url)
+    time.sleep(5)
+
+    #버튼 및 박스 선택
+    date_picker = driver.find_element(By.CSS_SELECTOR, 'input[name="dataSupplyDate"]')
+    print(f'날짜 박스 탐색 완료')
+    select_btn = driver.find_element(By.CSS_SELECTOR, 'span[class="searchBtn"]')
+    print(f'조회 버튼 탐색 완료')
+    down_btn = driver.find_element(By.CSS_SELECTOR, 'span[class="btn_base"]')
+    print(f'다운 탐색 완료')
+    
+    #데이터 다운 시작
+    print(f'{year}년 {month}월 다운 중...')
+    _, day = calendar.monthrange(year, month)
+
+    for i in tqdm(range(1,day+1)):
+        driver.execute_script(f"arguments[0].value = '{year}.{str(month).zfill(2)}.{str(i).zfill(2)}';", date_picker)
+        time.sleep(1)
+        select_btn.click()
+        time.sleep(3)
+        down_btn.click()
+        time.sleep(2)
+
+    time.sleep(10)
+
+    
+    print(f'크롤링 완료')
+    driver.quit()
+
+    return
+
+
 def detect_encoding(file_path):
     # 파일의 인코딩을 감지
     with open(file_path, 'rb') as file:
@@ -178,6 +217,81 @@ def Traffic_Volume(folder_path, code_file):
         final_data = pd.concat([final_data, data], ignore_index=True)
 
     return final_data
+
+
+def Between_Volume_Days(folder_path, code_file):
+    # 'TCS_영업소간통행시간'이 포함된 모든 CSV 파일을 불러오기
+    file_list = os.listdir(folder_path)
+
+    # '수도권 영업소 코드' 파일 인코딩 감지 및 불러오기
+    code_file_path = os.path.join(code_file)
+    code_file_encoding = detect_encoding(code_file_path)
+    data1 = pd.read_csv(code_file_path, low_memory=False, encoding=code_file_encoding)
+    key = data1['영업소명'].unique()
+
+    # 빈 데이터프레임 생성
+    final_data = pd.DataFrame()
+
+    # 각 파일에 대해 필터 적용 및 병합
+    for file in tqdm(file_list):
+        file_path = os.path.join(folder_path, file)
+        file_encoding = detect_encoding(file_path)
+        
+        if 'csv' not in file:
+            continue
+
+        # 파일 읽기
+        data = pd.read_csv(file_path, low_memory=False, encoding=file_encoding)[['집계일자', '출발영업소코드', '도착영업소코드', '출발영업소명', '도착영업소명', '도착지방향총교통량']]
+
+
+        # 필터링 로직 적용
+        data = data[data['출발영업소코드'].isin(key)]
+        data = data[data['도착영업소코드'].isin(key)]
+        
+        # 최종 데이터프레임에 병합
+        final_data = pd.concat([final_data, data], ignore_index=True)
+
+    return final_data
+
+def Between_Volume_Hours(folder_path, code_file):
+    file_list = os.listdir(folder_path)
+
+    # '수도권 영업소 코드' 파일 인코딩 감지 및 불러오기
+    code_file_path = os.path.join(code_file)
+    code_file_encoding = detect_encoding(code_file_path)
+    data1 = pd.read_csv(code_file_path, low_memory=False, encoding=code_file_encoding)
+    key = data1['영업소명'].unique()
+
+    # 빈 데이터프레임 생성
+    final_data = pd.DataFrame()
+
+    # 각 파일에 대해 필터 적용 및 병합
+    for file in tqdm(file_list):
+        file_path = os.path.join(folder_path, file)
+        file_encoding = detect_encoding(file_path)
+        
+        if 'csv' not in file:
+            continue
+
+        # 파일 읽기
+        data = pd.read_csv(file_path, low_memory=False, encoding=file_encoding)[['집계일자', '집계시', '요일명', '영업소', '교통량']]
+        data['교통량'] = data['교통량'].astype(int)
+        data = data.groupby(['집계일자', '집계시', '영업소', '요일명'], as_index=False)['교통량'].sum()
+        data['영업소'] = data['영업소'].str.split('->')
+        data['출발영업소명'] = data['영업소'].str[0]
+        data['도착영업소명'] = data['영업소'].str[1]
+        data = data.drop('영업소',axis=1)
+
+        # 필터링 로직 적용
+        data = data[data['출발영업소명'].isin(key)]
+        data = data[data['도착영업소명'].isin(key)]
+        # os.remove(f'{folder_path}/{file}')
+
+        # 최종 데이터프레임에 병합
+        final_data = pd.concat([final_data, data], ignore_index=True)
+
+    return final_data
+
 
 # 샌드위치 휴일을 찾는 함수
 def mark_sandwich_holidays(df):
@@ -303,8 +417,12 @@ def get_holiday_status(year, service_key):
 # 수도권 교통량 크롤링
 # get_csv(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=33&requestfrom=dataset#', min_year=2023, max_year=2023)
 
-# 영업소간 교통량 크롤링
+# 영업소간 교통량 크롤링(일단위)
 # get_csv(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=35&requestfrom=dataset', min_year=2023, max_year=2023)
+
+# 영업소간 교통량 크롤링(시간단위) - 일 단위로 다운받아야 함
+# for i in tqdm(range(1,13)):
+#     get_csv2(url = 'https://data.ex.co.kr/portal/fdwn/view?type=TCS&num=64&requestfrom=dataset', year=2023, month=i)
 
 
 # 통행시간 데이터셋_ 2023
@@ -315,10 +433,18 @@ def get_holiday_status(year, service_key):
 # Volume_Data = Traffic_Volume('Raw_data/TrafficVolume','Raw_data/gyeonggi_code.csv')
 # Volume_Data.to_csv('volumedata_test.csv',index=False,encoding='utf-8-sig')
 
+#영업소간 교통량 데이터셋(일별)_2023
+# Between_Data_Day = Between_Volume_Days('Raw_data/BetweenVolume(일별)','Raw_data/gyeonggi_code.csv')
+# Between_Data_Day.to_csv('03.영업소간통행량(일별).csv',index=False,encoding='utf-8-sig')
+
+#영업소간 교통량 데이터셋(시간)_2023
+Between_Data_Hours = Between_Volume_Hours('Raw_data/BetweenVolume(시간)','Raw_data/gyeonggi_code.csv')
+Between_Data_Hours.to_csv('04.영업소간통행량(시간).csv',index=False,encoding='utf-8-sig')
 
 #연휴 유무 알고리즘
 # 주말과 공휴일 데이터프레임 생성
-result_df = get_holiday_status(2023, service_key)
+# result_df = get_holiday_status(2023, service_key)
+
 
 
 
@@ -330,3 +456,7 @@ result_df = get_holiday_status(2023, service_key)
 ## 공사데이터 크롤링 + 1차 데이터셋 Join 해서 Row수 및 용량 테스트
 ## 적합 모델 서칭
 ## 추가 필요 데이터셋 탐색
+
+# 날씨도 추가 하면 좋을 듯 함.  / 미래 도착시간 예측은 학습 데이터셋을 따로 해야함. 즉, 모델이 2개가 필요 (현재 소요시간예축, 미래 소요시간예측)
+# 미래 예측 모델은 현재 통행량, 1시간 전~2시간 전 통행량을 input으로
+# 톨게이트간 통행량 API -  https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0111&pn=-1
