@@ -146,6 +146,17 @@ def get_csv2(url, year, month):
     return
 
 
+# 날짜 형식을 통일하는 메서드 정의
+def unify_date_format(date_str):
+    try:
+        # pd.to_datetime으로 날짜 변환 (자동으로 여러 형식 인식)
+        date_obj = pd.to_datetime(date_str, errors='coerce')
+        # 변환된 날짜를 'YYYY-MM-DD' 형식으로 반환
+        return date_obj.strftime('%Y-%m-%d')
+    except Exception:
+        # 변환에 실패하면 원본 값을 반환
+        return date_str
+
 def detect_encoding(file_path):
     # 파일의 인코딩을 감지
     with open(file_path, 'rb') as file:
@@ -184,7 +195,13 @@ def Traffic_Time(folder_path, code_file):
         # 최종 데이터프레임에 병합
         final_data = pd.concat([final_data, data], ignore_index=True)
 
-    return final_data
+    final_data = pd.merge(final_data,data1,left_on = '출발영업소코드',right_on='영업소코드',how='left')
+    final_data = final_data.rename(columns={'영업소명':'출발영업소명'})
+    final_data = pd.merge(final_data,data1,left_on = '도착영업소코드',right_on='영업소코드',how='left')   
+    final_data = final_data.rename(columns={'영업소명':'도착영업소명'})
+
+    final_data['집계일자'] = final_data['집계일자'].apply(unify_date_format)
+    return final_data.drop(['영업소코드_x','영업소코드_y'], axis=1)
 
 def Traffic_Volume(folder_path, code_file):
     # 'TCS_영업소간통행시간'이 포함된 모든 CSV 파일을 불러오기
@@ -215,7 +232,7 @@ def Traffic_Volume(folder_path, code_file):
         
         # 최종 데이터프레임에 병합
         final_data = pd.concat([final_data, data], ignore_index=True)
-
+    final_data['집계일자'] = final_data['집계일자'].apply(unify_date_format)
     return final_data
 
 
@@ -250,7 +267,7 @@ def Between_Volume_Days(folder_path, code_file):
         
         # 최종 데이터프레임에 병합
         final_data = pd.concat([final_data, data], ignore_index=True)
-
+    final_data['집계일자'] = final_data['집계일자'].apply(unify_date_format)
     return final_data
 
 def Between_Volume_Hours(folder_path, code_file):
@@ -289,7 +306,8 @@ def Between_Volume_Hours(folder_path, code_file):
 
         # 최종 데이터프레임에 병합
         final_data = pd.concat([final_data, data], ignore_index=True)
-
+    
+    final_data['집계일자'] = final_data['집계일자'].apply(unify_date_format)
     return final_data
 
 
@@ -399,13 +417,14 @@ def get_holiday_status(year, service_key):
             holiday_status = "비공휴일"
 
         result.append({
-            '날짜': date.strftime('%Y-%m-%d'),
+            '집계일자': date.strftime('%Y-%m-%d'),
             '휴일 여부': holiday_status
         })
 
     result_df = mark_sandwich_holidays(pd.DataFrame(result))
     result_df.to_csv(f'{year}_years_calendar.csv',index=False,encoding='utf-8-sig')
     return result_df
+
 
 
 # 도로 통행시간 크롤링
@@ -438,25 +457,58 @@ def get_holiday_status(year, service_key):
 # Between_Data_Day.to_csv('03.영업소간통행량(일별).csv',index=False,encoding='utf-8-sig')
 
 #영업소간 교통량 데이터셋(시간)_2023
-Between_Data_Hours = Between_Volume_Hours('Raw_data/BetweenVolume(시간)','Raw_data/gyeonggi_code.csv')
-Between_Data_Hours.to_csv('04.영업소간통행량(시간).csv',index=False,encoding='utf-8-sig')
+# Between_Data_Hours = Between_Volume_Hours('Raw_data/BetweenVolume(시간)','Raw_data/gyeonggi_code.csv')
+# Between_Data_Hours.to_csv('04.영업소간통행량(시간).csv',index=False,encoding='utf-8-sig')
 
 #연휴 유무 알고리즘
 # 주말과 공휴일 데이터프레임 생성
 # result_df = get_holiday_status(2023, service_key)
 
+# 1차데이터셋 생성 코드
+def mk_FirstData():
+    df01 = pd.read_csv('dataset/01.영업소간통행시간.csv',low_memory=False).drop('Unnamed: 6',axis = 1)
+    df04 = pd.read_csv('dataset/04.영업소간통행량(시간).csv',low_memory=False)
+    calendar2023 = pd.read_csv('dataset/2023_years_calendar.csv',low_memory=False)
+
+    data = pd.merge(df01,df04,on=['집계일자','집계시','출발영업소명','도착영업소명'],how='left')
+    data = pd.merge(data,calendar2023,on='집계일자')
+    
+    return data
+
+# First_data = mk_FirstData()
+# First_data.to_csv('dataset/1차데이터셋.csv',index=False,encoding='utf-8-sig')
+
+
+
+# 날씨 테스트
+data = pd.read_csv('Raw_data/ETC_O3_03_04_523880.csv',low_memory=False, encoding= detect_encoding('Raw_data/ETC_O3_03_04_523880.csv'))
+
+print(data['기상실황지역'].unique())
+# print(data['현재일기내용'].unique())
 
 
 
 
 
 
-## 통행량 데이터 고민인게 수도권 교통량도 추가할지... 일단  크롤링은 하자
-## 통행시간 데이터를 기준으로 통행량은 key값으로 날짜랑 출발 영업소 도착영업소로 나누자
+
 ## 공사데이터 크롤링 + 1차 데이터셋 Join 해서 Row수 및 용량 테스트
 ## 적합 모델 서칭
 ## 추가 필요 데이터셋 탐색
 
-# 날씨도 추가 하면 좋을 듯 함.  / 미래 도착시간 예측은 학습 데이터셋을 따로 해야함. 즉, 모델이 2개가 필요 (현재 소요시간예축, 미래 소요시간예측)
+# 날씨도 추가 하면 좋을 듯 함.
+# https://data.gg.go.kr/portal/data/service/selectServicePage.do?page=1&rows=10&sortColumn=&sortDirection=&infId=458YRRY04VI3BBMI6Q8326869752&infSeq=4&order=&loc=
+# https://data.kma.go.kr/data/grnd/selectAwsRltmList.do?pgmNo=56
+# 위 코드에서 경기도,서울 AWS코드를 가져옴 -> 도로교통포털에서 날씨정보에서 필터링
+# https://apihub.kma.go.kr/apiList.do?seqApi=10&seqApiSub=286&apiMov=4.%20%EB%8F%99%EB%84%A4%EC%98%88%EB%B3%B4(%EC%B4%88%EB%8B%A8%EA%B8%B0%EC%8B%A4%ED%99%A9%C2%B7%EC%B4%88%EB%8B%A8%EA%B8%B0%EC%98%88%EB%B3%B4%C2%B7%EB%8B%A8%EA%B8%B0%EC%98%88%EB%B3%B4)%20%EC%A1%B0%ED%9A%8C
+# 좌표값 받아서 날씨 조회 API   (추가 위도경도 데이터 활용해보자) -> 쓰기 어려워보임
+# 휴게소 날씨를 이용해야 할듯,,, 아니면 날씨를 입력받거나,,
+# 문제 -> 서울데이터가 없음,, 휴게소 고민해봐야할 듯
+
+#   
+# / 미래 도착시간 예측은 학습 데이터셋을 따로 해야함. 즉, 모델이 2개가 필요 (현재 소요시간예축, 미래 소요시간예측)
+
+
+
 # 미래 예측 모델은 현재 통행량, 1시간 전~2시간 전 통행량을 input으로
 # 톨게이트간 통행량 API -  https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0111&pn=-1
