@@ -58,6 +58,85 @@ def get_data(url='', params={}):
 # traffic_time = get_data(url = 'https://data.ex.co.kr/openapi/specialAnal/intercityLeadTime', params={'iYear':'2018'})
 # traffic_time.to_csv('test.csv',index=False,encoding='utf-8-sig')
 
+def get_weather_data(api_url, api_key):
+
+    # 데이터프레임을 저장할 리스트 생성
+    data = []
+    
+    #최종데이터프레임
+    final_df = pd.DataFrame()
+
+    # 시작일과 종료일 설정
+    start_date = datetime(2023, 1, 1)
+    end_date = datetime(2023, 12, 31)
+
+    # 날짜를 반복
+    current_date = start_date
+    while current_date <= end_date:
+        date_str = current_date.strftime('%Y%m%d')
+        _, day = calendar.monthrange(current_date.year, current_date.month)
+
+        for hour in tqdm(range(0, 24), desc=f"Processing {date_str}", leave=False):
+            params = {
+                'type': 'json',
+                'sdate': date_str,
+                'stdHour': str(hour).zfill(2),
+                'key': api_key
+            }
+            
+            try:
+                # API 호출
+                response = requests.get(api_url, params=params)
+                response.raise_for_status()  # 요청 실패 시 예외 발생
+                
+                # JSON 응답 파싱
+                json_data = response.json()['list']
+                df = pd.DataFrame(json_data)
+                
+                final_df = pd.concat([final_df,df])
+
+            except requests.exceptions.HTTPError as e:
+                print(f"HTTP error: {e} - Date: {date_str} Time: {hour}")
+                current_date-=timedelta(days=1)
+                
+            except requests.exceptions.RequestException as e:
+                print(f"Error: {e} - Date: {date_str} Time: {hour}")
+                current_date-=timedelta(days=1)
+
+        #1일마다 세이브
+        if date_str[6:] == str(day).zfill(2):
+            final_df.to_csv(f'{current_date.year}_{current_date.month}_weather.csv',index=False,encoding='utf-8-sig')
+
+        # 다음 날짜로 이동
+        current_date += timedelta(days=1)
+
+
+    final_df.to_csv('오류방지2023.csv', index=False, encoding='utf-8-sig')
+    final_df = final_df[['sdate','stdHour','unitName','addr','addrCode','addrName','weatherContents','correctNo','tempValue','rainfallValue','snowValue','windValue']]
+    final_df = final_df.rename(columns={
+                    'sdate' : '날짜',
+                    'stdHour' : '시간대',
+                    'unitName' : '휴게소명',
+                    'addr' : '주소',
+                    'addrCode' : '기상실황지역코드',
+                    'addrName' : '기상실황지역명',
+                    'weatherContents' : '현재일기내용',
+                    'correctNo' : '시정값',
+                    'tempValue' : '현재기온값',
+                    'rainfallValue' : '강수량',
+                    'snowValue' : '적설량',
+                    'windValue' : '풍속'
+                })
+    
+    # 필요에 따라 CSV로 저장
+    final_df.to_csv('weather_data_2023_ALL.csv', index=False, encoding='utf-8-sig')
+
+    filtered_df = final_df[final_df['주소'].str.contains('경기도|서울', na=False)]
+
+    filtered_df.to_csv('weather_data_2023_경기_서울.csv', index=False, encoding='utf-8-sig')
+
+    return final_df, filtered_df
+
 
 
 # 영업소간 통행시간 크롤링
@@ -480,12 +559,14 @@ def mk_FirstData():
 
 
 
+
 # 날씨 테스트
-data = pd.read_csv('Raw_data/ETC_O3_03_04_523880.csv',low_memory=False, encoding= detect_encoding('Raw_data/ETC_O3_03_04_523880.csv'))
+# data = pd.read_csv('Raw_data/ETC_O3_03_04_523880.csv',low_memory=False, encoding= detect_encoding('Raw_data/ETC_O3_03_04_523880.csv'))
 
-print(data['기상실황지역'].unique())
-# print(data['현재일기내용'].unique())
+# print(data['기상실황지역'].unique())
+# # print(data['현재일기내용'].unique())
 
+weather_data_all, weather_data_part = get_weather_data('https://data.ex.co.kr/openapi/restinfo/restWeatherList', KEY)
 
 
 
@@ -504,6 +585,7 @@ print(data['기상실황지역'].unique())
 # 좌표값 받아서 날씨 조회 API   (추가 위도경도 데이터 활용해보자) -> 쓰기 어려워보임
 # 휴게소 날씨를 이용해야 할듯,,, 아니면 날씨를 입력받거나,,
 # 문제 -> 서울데이터가 없음,, 휴게소 고민해봐야할 듯
+# 각 지역별로 묶어서 날씨가 제일 빈도 수가 많은 것을 채택
 
 #   
 # / 미래 도착시간 예측은 학습 데이터셋을 따로 해야함. 즉, 모델이 2개가 필요 (현재 소요시간예축, 미래 소요시간예측)
