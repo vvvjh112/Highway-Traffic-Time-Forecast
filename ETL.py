@@ -569,10 +569,6 @@ def mk_FirstData():
 weather_data_all, weather_data_part = get_weather_data('https://data.ex.co.kr/openapi/restinfo/restWeatherList', KEY)
 
 
-
-
-
-
 ## 공사데이터 크롤링 + 1차 데이터셋 Join 해서 Row수 및 용량 테스트
 ## 적합 모델 서칭
 ## 추가 필요 데이터셋 탐색
@@ -590,7 +586,7 @@ weather_data_all, weather_data_part = get_weather_data('https://data.ex.co.kr/op
 #   
 # / 미래 도착시간 예측은 학습 데이터셋을 따로 해야함. 즉, 모델이 2개가 필요 (현재 소요시간예축, 미래 소요시간예측)
 
-
+## 성능 보고 집계일을 월 단위로 할지,,
 
 # 미래 예측 모델은 현재 통행량, 1시간 전~2시간 전 통행량을 input으로
 # 톨게이트간 통행량 API -  https://data.ex.co.kr/openapi/basicinfo/openApiInfoM?apiId=0111&pn=-1
