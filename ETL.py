@@ -1,10 +1,12 @@
 import pandas as pd
-import os, requests, urllib.parse, time, zipfile, chardet, calendar
 import xml.etree.ElementTree as ET
+import numpy as np
+import os, requests, urllib.parse, time, zipfile, chardet, calendar, re
+
+from scipy.spatial import KDTree
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 from datetime import datetime, timedelta
-
 
 # 셀레니움
 from selenium import webdriver
@@ -33,7 +35,7 @@ os.system('clear')
 
 
 # API 호출 후 json형태로 받기
-def get_data(url='', params={}):
+def get_data(url='', params={}, col='list'):
     page_no = 1
     all_df = pd.DataFrame()
 
@@ -43,7 +45,7 @@ def get_data(url='', params={}):
         params['pageNo'] = page_no
         param_str = urllib.parse.urlencode(params)
         full_url = f'{url}?key={KEY}&type=json&{param_str}'
-        response = requests.get(full_url).json()['intercityLeadTimeLists']
+        response = requests.get(full_url).json()[col]
         response_df = pd.DataFrame(response)
         response_df['page_no'] = page_no
 
@@ -51,6 +53,8 @@ def get_data(url='', params={}):
             break  # 더 이상 데이터가 없으면 종료
 
         all_df = pd.concat([all_df,response_df])
+        print(f'{page_no}번째 작업 완료.')
+        page_no+=1
 
     return all_df
 
@@ -97,11 +101,11 @@ def get_weather_data(api_url, api_key):
 
             except requests.exceptions.HTTPError as e:
                 print(f"HTTP error: {e} - Date: {date_str} Time: {hour}")
-                current_date-=timedelta(days=1)
+                continue
                 
             except requests.exceptions.RequestException as e:
                 print(f"Error: {e} - Date: {date_str} Time: {hour}")
-                current_date-=timedelta(days=1)
+                continue
 
         #1일마다 세이브
         if date_str[6:] == str(day).zfill(2):
@@ -110,12 +114,10 @@ def get_weather_data(api_url, api_key):
         # 다음 날짜로 이동
         current_date += timedelta(days=1)
 
-
-    final_df.to_csv('오류방지2023.csv', index=False, encoding='utf-8-sig')
-    final_df = final_df[['sdate','stdHour','unitName','addr','addrCode','addrName','weatherContents','correctNo','tempValue','rainfallValue','snowValue','windValue']]
+    final_df = final_df[['sdate','stdHour','unitName','xValue','yValue','tmxValue','tmyValue','addr','addrCode','addrName','weatherContents','correctNo','tempValue','rainfallValue','snowValue','windValue']].drop_duplicates()
     final_df = final_df.rename(columns={
-                    'sdate' : '날짜',
-                    'stdHour' : '시간대',
+                    'sdate' : '집계일자',
+                    'stdHour' : '집계시',
                     'unitName' : '휴게소명',
                     'addr' : '주소',
                     'addrCode' : '기상실황지역코드',
@@ -129,8 +131,11 @@ def get_weather_data(api_url, api_key):
                 })
     
     # 필요에 따라 CSV로 저장
-    final_df.to_csv('weather_data_2023_ALL.csv', index=False, encoding='utf-8-sig')
+    final_df['도시명'] = final_df['주소'].apply(lambda x: re.search(r"\b(\w+시)\b", x).group(1) if re.search(r"\b(\w+시)\b", x) else None)
+    final_df = final_df.replace(-99.0,0)
 
+    final_df.to_csv('weather_data_2023_ALL.csv', index=False, encoding='utf-8-sig')
+    
     filtered_df = final_df[final_df['주소'].str.contains('경기도|서울', na=False)]
 
     filtered_df.to_csv('weather_data_2023_경기_서울.csv', index=False, encoding='utf-8-sig')
@@ -557,16 +562,108 @@ def mk_FirstData():
 # First_data = mk_FirstData()
 # First_data.to_csv('dataset/1차데이터셋.csv',index=False,encoding='utf-8-sig')
 
+# 톨게이트 좌표값 크롤링
+# tolgate = get_data(url='http://data.ex.co.kr/openapi/locationinfo/locationinfoUnit',params={'key':KEY, 'type':'json'})
+# tolgate.to_csv('Tolgate_info.csv',index=False,encoding='utf-8-sig')
+
+
+# 날씨
+# weather_data_all, weather_data_part = get_weather_data('https://data.ex.co.kr/openapi/restinfo/restWeatherList', KEY)
+
+# 최단거리 휴게소
+# def find_nearest_rest_area(weather_file, tolgate_file):
+#     # 데이터 읽기
+#     hue_weather = pd.read_csv(weather_file, low_memory=False)
+#     gyeonggi_tolgate = pd.read_csv(tolgate_file)
+
+#     # 휴게소 좌표 설정
+#     rest_coords = hue_weather[['xValue', 'yValue']].values
+#     rest_tree = KDTree(rest_coords)
+
+#     # 가장 가까운 휴게소를 찾는 함수
+#     def find_nearest_rest_area_scipy(toll_x, toll_y):
+#         distance, idx = rest_tree.query([toll_x, toll_y])
+#         nearest_rest_area = hue_weather.iloc[idx]
+#         return nearest_rest_area['휴게소명'], nearest_rest_area['xValue'], nearest_rest_area['yValue'], distance
+
+#     tqdm.pandas()
+#     # tqdm을 적용하여 진행 상태 표시
+#     gyeonggi_tolgate[['nearest_rest_area', 'rest_x', 'rest_y', 'distance']] = gyeonggi_tolgate.progress_apply(
+#         lambda row: find_nearest_rest_area_scipy(row['xValue'], row['yValue']), axis=1, result_type='expand'
+#     )
+
+#     # 결과를 CSV로 저장
+#     gyeonggi_tolgate.to_csv('Gyeonggi_code_hue.csv.csv', index=False, encoding='utf-8-sig')
+
+
+# find_nearest_rest_area('dataset/weather_data_2023_경기_서울.csv', 'Raw_data/gyeonggi_code.csv')
+
+
+# 2차데이터셋
+def mk_SecondData():
+    First = pd.read_csv('dataset/1차데이터셋.csv',low_memory=False)
+    Gyeonggi = pd.read_csv('dataset\Gyeonggi_code_hue.csv',low_memory=False)
+    weather = pd.read_csv('dataset\weather_data_2023_경기_서울.csv',low_memory=False)
+
+    First['집계일자'] = First['집계일자'].str.replace('-','')
+    weather['날짜'] = weather['날짜'].astype(str)
+    
+
+    First = pd.merge(First,Gyeonggi.rename(columns={'영업소명':'출발영업소명','nearest_rest_area':'출발휴게소명'})[['출발영업소명','출발휴게소명']],on='출발영업소명',how='left')
+
+    First = pd.merge(First,Gyeonggi.rename(columns={'영업소명':'도착영업소명','nearest_rest_area':'도착휴게소명'})[['도착영업소명','도착휴게소명']],on='도착영업소명',how='left')
+
+    First = pd.merge(First,weather.rename(columns={'날짜':'집계일자','시간대':'집계시','휴게소명':'출발휴게소명','현재일기내용':'출발현재일기내용','시정값':'출발시정값','현재기온값':'출발현재기온값','강수량':'출발강수량','적설량':'출발적설량','풍속':'출발풍속'})[['집계일자','집계시','출발현재일기내용','출발시정값','출발현재기온값','출발강수량','출발적설량','출발풍속','출발휴게소명']],on=['집계일자','집계시','출발휴게소명'],how='left')
+
+    First = pd.merge(First,weather.rename(columns={'날짜':'집계일자','시간대':'집계시','휴게소명':'도착휴게소명','현재일기내용':'도착현재일기내용','시정값':'도착시정값','현재기온값':'도착현재기온값','강수량':'도착강수량','적설량':'도착적설량','풍속':'도착풍속'})[['집계일자','집계시','도착현재일기내용','도착시정값','도착현재기온값','도착강수량','도착적설량','도착풍속','도착휴게소명']],on=['집계일자','집계시','도착휴게소명'],how='left')
+
+
+    return First
+
+Second_data = mk_SecondData()
+Second_data.to_csv('dataset/2차데이터셋.csv',index=False,encoding='utf-8-sig')
+    
 
 
 
-# 날씨 테스트
-# data = pd.read_csv('Raw_data/ETC_O3_03_04_523880.csv',low_memory=False, encoding= detect_encoding('Raw_data/ETC_O3_03_04_523880.csv'))
 
-# print(data['기상실황지역'].unique())
-# # print(data['현재일기내용'].unique())
 
-weather_data_all, weather_data_part = get_weather_data('https://data.ex.co.kr/openapi/restinfo/restWeatherList', KEY)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ## 공사데이터 크롤링 + 1차 데이터셋 Join 해서 Row수 및 용량 테스트
