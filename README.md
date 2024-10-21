@@ -1,5 +1,3 @@
-# Highway-Traffic-Time-Forecast
-Highway Traffic Time Forecast Predict
 - 진행 기간 : 2024.10.02 ~ 2024.12.31
 
 ## 개요
@@ -45,3 +43,9 @@ Highway Traffic Time Forecast Predict
 6. API 테스트
 7. Front 개발 및 API 연동
 8. 테스트
+
+## 진행사항
+
+- DB 구축 완료 (로컬에 적재 후 추후 서버 배포 예정)
+- 학습에 사용할 2차 데이터셋 생성 완료 (10/20)
+- 학습데이터셋 분석 및 모델 테스트 (10/21 ~)
